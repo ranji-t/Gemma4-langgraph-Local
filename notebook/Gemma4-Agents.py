@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.2"
 app = marimo.App(width="full")
 
 
@@ -423,48 +423,296 @@ def _(results):
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Using LangSmith Evluation**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Creating / Reading  Dataset & Creating / listing Exmaples*
+    """)
     return
 
 
 @app.cell
 def _():
+    # Standrd Imports
+    import os
+
+    # Third Party Imports
+    from dotenv import load_dotenv
+    from langsmith import Client
+
+    return Client, load_dotenv
+
+
+@app.cell
+def _(load_dotenv):
+    # Load dotenv file
+    load_dotenv()
+    return
+
+
+@app.cell
+def _(Client):
+    # Create Clinet
+    client = Client()
+    # Name the data set
+    dataset_name = "Simple ChatBot QnA Dataset"
+    # Create Dataset / Read Dataset
+    # dataset = client.create_dataset(dataset_name=dataset_name)
+    dataset = client.read_dataset(dataset_name=dataset_name)
+    return client, dataset_name
+
+
+@app.cell
+def _():
+    # Tere DataSet ID is stored
+    dataset_id = "dd31d4ce-a954-4682-8b63-19b8b36d55e9"
+    return (dataset_id,)
+
+
+@app.cell
+def _():
+    # # My examples
+    # examples = [
+    #     {
+    #         "inputs": {"question": "What is LangGraph?"},
+    #         "outputs": {
+    #             "answer": "LangGraph is a framework for building stateful, multi-step workflows with LLMs using graph-based execution."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "How is LangGraph different from LangChain?"},
+    #         "outputs": {
+    #             "answer": "LangGraph focuses on stateful, graph-based workflows with cycles and control flow, while LangChain primarily provides linear chains and utilities for LLM applications."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What problem does LangGraph solve?"},
+    #         "outputs": {
+    #             "answer": "LangGraph solves the problem of managing complex, stateful LLM workflows that require branching, loops, and memory across multiple steps."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is a node in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "A node in LangGraph represents a unit of computation, typically a function that processes input state and returns updated state."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is an edge in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "An edge defines the transition between nodes in the graph and determines how execution flows from one node to another."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is state in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "State in LangGraph is a shared data structure that is passed between nodes and updated as the workflow executes."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "Can LangGraph handle loops?"},
+    #         "outputs": {
+    #             "answer": "Yes, LangGraph supports cyclic graphs, allowing workflows to include loops and iterative processes."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "Why is LangGraph useful for agents?"},
+    #         "outputs": {
+    #             "answer": "LangGraph is useful for agents because it enables controlled multi-step reasoning, tool usage, and state persistence across iterations."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is a conditional edge in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "A conditional edge determines the next node based on logic applied to the current state, enabling branching workflows."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "How does LangGraph manage memory?"},
+    #         "outputs": {
+    #             "answer": "LangGraph manages memory through the shared state object, which persists and evolves as nodes process data."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {
+    #             "question": "What is the role of the START node in LangGraph?"
+    #         },
+    #         "outputs": {
+    #             "answer": "The START node defines the entry point of the graph where execution begins."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is the END node in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "The END node signifies the termination of the workflow when execution completes."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "Can LangGraph be used for RAG pipelines?"},
+    #         "outputs": {
+    #             "answer": "Yes, LangGraph is well suited for RAG pipelines where retrieval, reasoning, and generation steps need to be orchestrated in a structured workflow."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {
+    #             "question": "How does LangGraph help prevent infinite loops?"
+    #         },
+    #         "outputs": {
+    #             "answer": "LangGraph allows developers to control loop conditions and termination logic explicitly through state and conditional edges."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "What is a practical use case of LangGraph?"},
+    #         "outputs": {
+    #             "answer": "A practical use case is building an agent that retrieves documents, evaluates them, refines queries, and iterates until a satisfactory answer is produced."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "Explain LangGraph in simple terms."},
+    #         "outputs": {
+    #             "answer": "LangGraph lets you design LLM workflows like a flowchart where each step updates shared data and decides what to do next."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "Does LangGraph support parallel execution?"},
+    #         "outputs": {
+    #             "answer": "LangGraph can support parallel execution depending on how nodes and edges are defined, though it is primarily designed for controlled workflows."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {
+    #             "question": "What makes LangGraph better than simple chains for complex workflows?"
+    #         },
+    #         "outputs": {
+    #             "answer": "LangGraph supports loops, branching, and persistent state, which are difficult or impossible to implement cleanly with simple linear chains."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {"question": "How is state updated in LangGraph?"},
+    #         "outputs": {
+    #             "answer": "Each node receives the current state, processes it, and returns an updated version that is passed to the next node."
+    #         },
+    #     },
+    #     {
+    #         "inputs": {
+    #             "question": "Why is LangGraph important for production LLM systems?"
+    #         },
+    #         "outputs": {
+    #             "answer": "LangGraph enables structured, debuggable, and reproducible workflows, which are essential for reliability in production systems."
+    #         },
+    #     },
+    # ]
+
+    # # Add / Create Examples
+    # client.create_examples(dataset_id=dataset_id, examples=examples)
+    return
+
+
+@app.cell
+def _(client, dataset_id):
+    # Rest of Example IDs
+    examples = list(client.list_examples(dataset_id=dataset_id))
+    list(examples)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # *LLM as Judge*
+    """)
     return
 
 
 @app.cell
 def _():
-    return
+    from openai import OpenAI
+    from langsmith.wrappers import wrap_openai
+
+    return OpenAI, wrap_openai
 
 
 @app.cell
-def _():
-    return
+def _(OpenAI, wrap_openai):
+    # Create Open AI clinet Wrapper
+    openai_client = wrap_openai(OpenAI())
+
+    # System prompt
+    eval_instructions = "You are an expert professor specialized in grading student's answer to questions."
+
+
+    # The Evauation metic Correctness
+    def correctness(inputs: dict, outputs: dict, reference_outputs: dict) -> bool:
+        # The Prompt
+        user_content = f"""You are grading the following question:
+        {inputs["question"]}
+        Here is the real answer
+        {reference_outputs["answer"]}
+        You are grading the following predicted answer:
+        {outputs["response"]}
+        Respond with CORRECT or INCORRECT:
+        Grade:
+        """
+        # Get response
+        response = (
+            openai_client.chat.completions.create(
+                model="gpt-5.4-nano-2026-03-17",
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": eval_instructions},
+                    {"role": "user", "content": user_content},
+                ],
+            )
+            .choices[0]
+            .message.content
+        )
+        return response == "CORRECT"
+
+    return correctness, openai_client
 
 
 @app.cell
-def _():
-    return
+def _(openai_client):
+    default_instructions = "Respond to the users question in a short, concise manner (one short sentence)."
+
+
+    def my_app(
+        inputs: dict,
+    ) -> str:
+        return {
+            "response": (
+                openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    temperature=0,
+                    messages=[
+                        {"role": "system", "content": default_instructions},
+                        {"role": "user", "content": inputs["question"]},
+                    ],
+                )
+                .choices[0]
+                .message.content
+            )
+        }
+
+    return (my_app,)
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
+def _(client, correctness, dataset_name, my_app):
+    client.evaluate(
+        my_app,
+        data=dataset_name,
+        evaluators=[correctness],
+        experiment_prefix="openai-4o-mini-chatbot",
+    )
     return
 
 
