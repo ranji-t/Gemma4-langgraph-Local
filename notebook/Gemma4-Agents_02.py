@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.2"
+__generated_with = "0.23.3"
 app = marimo.App(width="full")
 
 
@@ -9,29 +9,49 @@ def _():
     # Standard Imports
     import json
     import operator
+    from itertools import chain
     from dataclasses import dataclass, field
-    from typing import TypedDict, Literal, Self, Sequence, Annotated
+    from typing import TypedDict, Literal, Self, Sequence, Annotated, NamedTuple
 
     # Third party Imports
     import marimo as mo
+    import numpy as np
+    from rank_bm25 import BM25Okapi
     from openai import OpenAI
     from ollama import chat, generate
+    from ddgs.ddgs import DDGS, DDGSException
     from langgraph.graph import START, END
     from langgraph.graph.state import StateGraph
+    from sentence_transformers import SentenceTransformer, SparseEncoder
+    from langchain_core.runnables.graph import MermaidDrawMethod
+    from langchain_text_splitters import (
+        RecursiveCharacterTextSplitter,
+        TokenTextSplitter,
+    )
 
     return (
         Annotated,
+        BM25Okapi,
+        DDGS,
+        DDGSException,
+        END,
         Literal,
         OpenAI,
+        RecursiveCharacterTextSplitter,
+        START,
         Self,
+        SentenceTransformer,
         Sequence,
         StateGraph,
+        TokenTextSplitter,
         TypedDict,
+        chain,
         chat,
         dataclass,
         field,
         json,
         mo,
+        np,
         operator,
     )
 
@@ -336,14 +356,44 @@ def _(Annotated, Message, Sequence, TypedDict, operator):
     # Build the app
     class AgentState01(TypedDict):
         messages: Annotated[Sequence[Message], operator]
-        web_query: None | str
-        search_web: bool
+        summary: None | str
+        prime_query: None | str
+        use_web: bool
+        web_search_result: Sequence[str]
 
     return (AgentState01,)
 
 
 @app.cell
-def _(AgentState01, Message, Sequence, json, use_web):
+def _(
+    AgentState01,
+    Message,
+    Sequence,
+    json,
+    summarizer,
+    update_query,
+    use_web,
+):
+    def summarizer_node(state: AgentState01) -> AgentState01:
+        # Extrac messages
+        messsages = state["messages"]
+        # Pass it though the summarizer
+        result = summarizer(messages=messsages)
+        # Content summarized
+        return {"summary": result.message.content}
+
+
+    def smart_query_node(state: AgentState01) -> AgentState01:
+        # Extract the query
+        query = state["messages"][-1].content
+        # Extract context
+        context = state["summary"]
+        # Return
+        result = update_query(context=context, query=query)
+        # Update the query
+        return {"prime_query": result.message.content}
+
+
     def web_use_node(state: AgentState01) -> AgentState01:
         # Message extraction
         messages: Sequence[Message] = state["messages"]
@@ -353,51 +403,328 @@ def _(AgentState01, Message, Sequence, json, use_web):
 
         # Does the node need
         resonse = use_web(user_query=query)
-        json_return = json.load(resonse.message.content)
+        json_return = json.loads(resonse.message.content)
 
         # message
         return {"use_web": json_return["use_web"]}
 
-    return (web_use_node,)
+
+    def answer_node(state: AgentState01) -> AgentState01:
+        pass
+
+    return smart_query_node, summarizer_node, web_use_node
 
 
 @app.cell
-def _(AgentState01, StateGraph, web_use_node):
+def _(
+    DDGS,
+    DDGSException,
+    RecursiveCharacterTextSplitter,
+    Sequence,
+    TokenTextSplitter,
+    chain,
+):
+    def perform_web_search(query: str, max_results: int = 5) -> Sequence[str]:
+        # Show web results
+        web_results = []
+
+        # Search the web
+        with DDGS() as d:
+            # Get the urls from the search
+            for url_dict in d.text(query=query, max_results=max_results):
+                try:
+                    # Get url form this
+                    url = url_dict.get("href")
+                    # Extract the data
+                    data = d.extract(url, fmt="text_markdown").get("content")
+                    # Add data to container
+                    web_results.append(data)
+
+                except DDGSException as e:
+                    print(f"DDGSException: {e}")
+
+        # The Recursice Character text split
+        rcts = RecursiveCharacterTextSplitter(
+            chunk_size=4000,
+            chunk_overlap=200,
+        )
+        tts = TokenTextSplitter(chunk_size=300, chunk_overlap=50)
+        # The Splitter splits web results
+        split_text = chain.from_iterable(
+            tts.split_text(txt) for txt in web_results
+        )
+
+        # Return the data
+        return list(split_text)
+
+    return (perform_web_search,)
+
+
+@app.cell
+def _(BM25Okapi, SentenceTransformer, Sequence, np):
+    def context_scorer(query: str, docs: Sequence[str]):
+        # Create Encoder
+        encoder_model = SentenceTransformer(
+            # model_name_or_path="all-mpnet-base-v2",
+            model_name_or_path="nomic-ai/nomic-embed-text-v1.5",
+            cache_folder=r"D:\Codebase\Gemma4-Test\model",
+            local_files_only=True,
+        )
+
+        # Create Document Encoding
+        doc_encoding = encoder_model.encode(
+            inputs=[f"search_document: {sent}" for sent in docs],
+            show_progress_bar=True,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
+
+        # Create query Embedding
+        query_encoding = encoder_model.encode_query(
+            f"search_query: {query}",
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
+
+        # Similarity
+        sim_score = np.einsum("ne, e -> n", doc_encoding, query_encoding)
+
+        # return
+        return (sim_score, doc_encoding, query_encoding)
+
+
+    def semantic_scorer(query: str, docs: Sequence[str]):
+        # Tokenize the query
+        tokenized_docs = [doc.lower().strip().split() for doc in docs]
+        tokenized_query = query.lower().strip().split()
+
+        # Build BM25 index
+        bm25 = BM25Okapi(corpus=tokenized_docs)
+
+        # Score all docs against query
+        scores = bm25.get_scores(tokenized_query)
+
+        # return
+        return scores
+
+    return context_scorer, semantic_scorer
+
+
+@app.cell
+def _(nd, np):
+    def mmr(
+        scores: nd.arrays,
+        doc_encoding: nd.arrays,
+        top_k: int = 10,
+        lambda_param: float = 0.5,
+        score_threshold: float = -np.inf,
+    ):
+        # Get the number of samples
+        n_docs = len(scores)
+
+        # Tracking IDs
+        selected_ids = []
+        remaining_ids = list(range(n_docs))
+        remaining_ids = [i for i in remaining_ids if (scores[i] > score_threshold)]
+        red_n_docs = len(remaining_ids)
+
+        if red_n_docs == 0:
+            raise ValueError(
+                "No docs selected deduce the threshold or chedk if you are sdingi in empty data"
+            )
+
+        # Looop the TOPK
+        for _ in range(min(red_n_docs, top_k)):
+            if not selected_ids:
+                max_idx = np.argmax(scores[remaining_ids])
+                best_idx = remaining_ids[max_idx]
+
+            else:
+                # Get embedding and scores
+                best_docs_emb = doc_encoding[selected_ids]
+                remaining_docs_emb = doc_encoding[remaining_ids]
+                remaining_docs_score = scores[remaining_ids]
+
+                # Compute the remaing best scores the nthe wors case
+                worst_redundency = np.einsum(
+                    "rf, bf -> rb", remaining_docs_emb, best_docs_emb
+                ).max(axis=1)
+
+                # Compute MRR
+                mmr_score = (lambda_param * remaining_docs_score) - (
+                    (1 - lambda_param) * worst_redundency
+                )
+
+                # get the index of the best MMR array the nget the index of the main array
+                max_idx = np.argmax(mmr_score)
+                best_idx = remaining_ids[max_idx]
+
+            # Update the racking indices
+            selected_ids.append(best_idx)
+            remaining_ids.remove(best_idx)
+
+        # Return selected index
+        return selected_ids
+
+    return (mmr,)
+
+
+@app.function
+def rrf(ranked_lists: list[list[int]], k: int = 60, top_n: int = 10):
+    # The sore tracker for each index
+    scores = dict()
+
+    # Iterate through lists
+    for ranked_list in ranked_lists:
+        for i, idx in enumerate(ranked_list, start=1):
+            if idx in scores:
+                scores[idx] += 1 / (k + i)
+            else:
+                scores[idx] = 1 / (k + i)
+
+    # Sort the values based on the value
+    rrf_ranks = sorted(
+        scores.keys(), key=lambda k: scores.get(k), reverse=True
+    )
+
+    # Return sorted inidices
+    return list(rrf_ranks)[:top_n], sorted(scores.values())
+
+
+@app.cell
+def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
+    def web_search_node(state: AgentState01) -> AgentState01:
+        # Extract Query from sate
+        query = state["prime_query"]
+
+        # Search The web
+        search_results = perform_web_search(query)
+
+        # Rank the documents Context Wise
+        doc_context_score, doc_encoding, query_encoding = context_scorer(
+            query, search_results
+        )
+
+        # Rank the documents Context Wise
+        doc_semantic_score = semantic_scorer(query, search_results)
+
+        # Get MMR IDs based on
+        mmr_dense = mmr(doc_context_score, doc_encoding, score_threshold=0.5)
+        # Get MMR IDs based on Sparsity
+        mmr_sparse = mmr(
+            doc_semantic_score / doc_semantic_score.max(),
+            doc_encoding,
+            score_threshold=0.5,
+        )
+
+        # Get the Final results
+        final_docs_index, _ = rrf([mmr_dense, mmr_sparse], top_n=5)
+        # Final Docs
+        final_docs = [search_results[i] for i in final_docs_index]
+
+        # Return the data
+        return {"web_search_result": final_docs}
+
+    return (web_search_node,)
+
+
+@app.cell
+def _():
+    # # Chunk the model
+    # query = "Current Nvidia stock price"
+    # search_results = perform_web_search("Latest Nvidia stock price")
+
+    # # Rank the documents Context Wise
+    # doc_context_score, doc_encoding, query_encoding = context_scorer(
+    #     query, search_results
+    # )
+
+    # # Rank the documents Context Wise
+    # doc_semantic_score = semantic_scorer(query, search_results)
+
+
+    # # Get MMR IDs based on
+    # mmr_dense = mmr(doc_context_score, doc_encoding, score_threshold=0.5)
+
+    # # Get MMR IDs based on Sparsity
+    # mmr_sparse = mmr(
+    #     doc_semantic_score / doc_semantic_score.max(),
+    #     doc_encoding,
+    #     score_threshold=0.5,
+    # )
+
+    # final_docs_index = rrf([mmr_dense, mmr_sparse])
+    return
+
+
+@app.cell
+def _(
+    AgentState01,
+    END,
+    START,
+    StateGraph,
+    smart_query_node,
+    summarizer_node,
+    web_search_node,
+    web_use_node,
+):
     # The State of the
     builder01 = StateGraph(AgentState01)
 
     # Build Node & Edges of the app
+    builder01.add_node("Summary Node", summarizer_node)
+    builder01.add_node("Smart Query Node", smart_query_node)
+    builder01.add_node(
+        "Dummy Query Node",
+        lambda state: {"prime_query": state["messages"][0].content},
+    )
     builder01.add_node("Web Search?", web_use_node)
+    builder01.add_node("Google it!!", web_search_node)
+
+    # Add Edges to the Graph
+    builder01.add_conditional_edges(
+        source=START,
+        path=lambda state: len(state["messages"]) > 1,
+        path_map={True: "Summary Node", False: "Dummy Query Node"},
+    )
+    # With Context Path
+    builder01.add_edge("Summary Node", "Smart Query Node")
+    builder01.add_edge("Smart Query Node", "Web Search?")
+    # With out context path
+    builder01.add_edge("Dummy Query Node", "Web Search?")
+    builder01.add_conditional_edges(
+        "Web Search?",
+        lambda state: state["use_web"],
+        {True: "Google it!!", False: END},
+    )
+    builder01.add_edge("Google it!!", END)
+
+    # build the app
+    app01 = builder01.compile()
+    return (app01,)
+
+
+@app.cell
+def _(app01):
+    # Show Graph
+    print(app01.get_graph().draw_ascii())
     return
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
+def _(Message, app01):
+    # app01.invoke({"messages": [Message(role="user", content="Who are You?")]})
+    app01.invoke(
+        {
+            "messages": [
+                Message(role="user", content="Who are You?"),
+                Message(role="assistant", content="I am Gemma4 an LLM by google!"),
+                Message(
+                    role="user", content="What is the Nvidia Stock Price Today?"
+                ),
+            ]
+        }
+    )
     return
 
 
