@@ -8,6 +8,7 @@ app = marimo.App(width="full")
 def _():
     # Standard Imports
     import json
+    import logging
     import operator
     from itertools import chain
     from dataclasses import dataclass, field
@@ -36,7 +37,6 @@ def _():
         DDGSException,
         END,
         Literal,
-        OpenAI,
         RecursiveCharacterTextSplitter,
         START,
         Self,
@@ -64,6 +64,14 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Message Layout**
+    """)
+    return
+
+
 @app.cell
 def _(Literal, Self, dataclass, field):
     @dataclass(frozen=True)
@@ -85,35 +93,11 @@ def _(Literal, Self, dataclass, field):
 
 
 @app.cell
-def _(Message):
-    # Tresting Repr
-    Message(role="system", content="You are good Boy")
-    return
-
-
-@app.cell
-def _(Message):
-    # The Message
-    Message(role="system", content="You are good Boy").text
-    return
-
-
-@app.cell
 def _():
     # Models
     gemma_lite = "gemma4:e2b"
     gemma_mid = "gemma4:e4b"
     return (gemma_lite,)
-
-
-@app.cell
-def _(OpenAI):
-    # Creat a Open AI clinet
-    client = OpenAI(
-        api_key="ollama",  # Required but ignored by ollama
-        base_url="http://localhost:11434/v1",
-    )
-    return
 
 
 @app.cell
@@ -346,73 +330,29 @@ def _(mo, result3):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **The Agent Graph**
+    # **SetUp Actions On App Start up**
     """)
     return
 
 
 @app.cell
-def _(Annotated, Message, Sequence, TypedDict, operator):
-    # Build the app
-    class AgentState01(TypedDict):
-        messages: Annotated[Sequence[Message], operator]
-        summary: None | str
-        prime_query: None | str
-        use_web: bool
-        web_search_result: Sequence[str]
-
-    return (AgentState01,)
-
-
-@app.cell
-def _(
-    AgentState01,
-    Message,
-    Sequence,
-    json,
-    summarizer,
-    update_query,
-    use_web,
-):
-    def summarizer_node(state: AgentState01) -> AgentState01:
-        # Extrac messages
-        messsages = state["messages"]
-        # Pass it though the summarizer
-        result = summarizer(messages=messsages)
-        # Content summarized
-        return {"summary": result.message.content}
+def _(SentenceTransformer):
+    # Create Encoder
+    encoder_model = SentenceTransformer(
+        # model_name_or_path="all-mpnet-base-v2",
+        model_name_or_path="nomic-ai/nomic-embed-text-v1.5",
+        cache_folder=r"D:\Codebase\Gemma4-Test\model",
+        local_files_only=True,
+    )
+    return (encoder_model,)
 
 
-    def smart_query_node(state: AgentState01) -> AgentState01:
-        # Extract the query
-        query = state["messages"][-1].content
-        # Extract context
-        context = state["summary"]
-        # Return
-        result = update_query(context=context, query=query)
-        # Update the query
-        return {"prime_query": result.message.content}
-
-
-    def web_use_node(state: AgentState01) -> AgentState01:
-        # Message extraction
-        messages: Sequence[Message] = state["messages"]
-
-        # Extract the last query from the node
-        query: str = messages[-1].content
-
-        # Does the node need
-        resonse = use_web(user_query=query)
-        json_return = json.loads(resonse.message.content)
-
-        # message
-        return {"use_web": json_return["use_web"]}
-
-
-    def answer_node(state: AgentState01) -> AgentState01:
-        pass
-
-    return smart_query_node, summarizer_node, web_use_node
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Web Search**
+    """)
+    return
 
 
 @app.cell
@@ -461,16 +401,8 @@ def _(
 
 
 @app.cell
-def _(BM25Okapi, SentenceTransformer, Sequence, np):
+def _(BM25Okapi, Sequence, encoder_model, np):
     def context_scorer(query: str, docs: Sequence[str]):
-        # Create Encoder
-        encoder_model = SentenceTransformer(
-            # model_name_or_path="all-mpnet-base-v2",
-            model_name_or_path="nomic-ai/nomic-embed-text-v1.5",
-            cache_folder=r"D:\Codebase\Gemma4-Test\model",
-            local_files_only=True,
-        )
-
         # Create Document Encoding
         doc_encoding = encoder_model.encode(
             inputs=[f"search_document: {sent}" for sent in docs],
@@ -592,6 +524,103 @@ def rrf(ranked_lists: list[list[int]], k: int = 60, top_n: int = 10):
 
 
 @app.cell
+def _():
+    # # Chunk the model
+    # query = "Current Nvidia stock price"
+    # search_results = perform_web_search("Latest Nvidia stock price")
+
+    # # Rank the documents Context Wise
+    # doc_context_score, doc_encoding, query_encoding = context_scorer(
+    #     query, search_results
+    # )
+
+    # # Rank the documents Context Wise
+    # doc_semantic_score = semantic_scorer(query, search_results)
+
+
+    # # Get MMR IDs based on
+    # mmr_dense = mmr(doc_context_score, doc_encoding, score_threshold=0.5)
+
+    # # Get MMR IDs based on Sparsity
+    # mmr_sparse = mmr(
+    #     doc_semantic_score / doc_semantic_score.max(),
+    #     doc_encoding,
+    #     score_threshold=0.5,
+    # )
+
+    # final_docs_index = rrf([mmr_dense, mmr_sparse])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **The Agent Graph**
+    """)
+    return
+
+
+@app.cell
+def _(Annotated, Message, Sequence, TypedDict, operator):
+    # Build the app
+    class AgentState01(TypedDict):
+        messages: Annotated[Sequence[Message], operator.add]
+        summary: None | str
+        prime_query: None | str
+        use_web: bool
+        web_search_result: Sequence[str]
+
+    return (AgentState01,)
+
+
+@app.cell
+def _(
+    AgentState01,
+    Message,
+    Sequence,
+    json,
+    summarizer,
+    update_query,
+    use_web,
+):
+    def summarizer_node(state: AgentState01) -> AgentState01:
+        # Extrac messages
+        messsages = state["messages"]
+        # Pass it though the summarizer
+        result = summarizer(messages=messsages)
+        # Content summarized
+        return {"summary": result.message.content}
+
+
+    def smart_query_node(state: AgentState01) -> AgentState01:
+        # Extract the query
+        query = state["messages"][-1].content
+        # Extract context
+        context = state["summary"]
+        # Return
+        result = update_query(context=context, query=query)
+        # Update the query
+        return {"prime_query": result.message.content}
+
+
+    def web_use_node(state: AgentState01) -> AgentState01:
+        # Message extraction
+        messages: Sequence[Message] = state["messages"]
+
+        # Extract the last query from the node
+        query: str = messages[-1].content
+
+        # Does the node need
+        resonse = use_web(user_query=query)
+        json_return = json.loads(resonse.message.content)
+
+        # message
+        return {"use_web": json_return["use_web"]}
+
+    return smart_query_node, summarizer_node, web_use_node
+
+
+@app.cell
 def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
     def web_search_node(state: AgentState01) -> AgentState01:
         # Extract Query from sate
@@ -629,32 +658,69 @@ def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
 
 
 @app.cell
-def _():
-    # # Chunk the model
-    # query = "Current Nvidia stock price"
-    # search_results = perform_web_search("Latest Nvidia stock price")
+def _(AgentState01, Message, chat, gemma_lite):
+    def answering_node(state: AgentState01) -> AgentState01:
+        # Get enghances query
+        user_prompt = state["prime_query"]
 
-    # # Rank the documents Context Wise
-    # doc_context_score, doc_encoding, query_encoding = context_scorer(
-    #     query, search_results
-    # )
+        # If not None
+        if state["web_search_result"] is not None:
+            # Convert this to string
+            consolidates_results = "\n-----\n".join(state["web_search_result"])
+            system_prompt = f"""
+    # Role
+    You are an expert research analyst. Your job is to answer the user query accurately using the provided web search results.
 
-    # # Rank the documents Context Wise
-    # doc_semantic_score = semantic_scorer(query, search_results)
+    # Instructions
+    - Answer directly and concisely based on the provided context
+    - Synthesize information across multiple sources — do not just repeat one source
+    - If sources contradict each other, acknowledge it and present both perspectives
+    - If the context does not contain enough information to answer fully, say so clearly
+    - Never fabricate information not present in the context
+    - Cite which part of the context supports your answer naturally in prose
 
+    # Context
+    The following are web search results relevant to the query:
+    -----
+    {consolidates_results}
+    -----
 
-    # # Get MMR IDs based on
-    # mmr_dense = mmr(doc_context_score, doc_encoding, score_threshold=0.5)
+    # Output Format
+    Answer in clear prose. Be direct. Lead with the answer, then support it with details from context.
+    """
+        else:
+            consolidates_results = None
+            system_prompt = """
+    # Role
+    You are a knowledgeable assistant answering from your training knowledge.
 
-    # # Get MMR IDs based on Sparsity
-    # mmr_sparse = mmr(
-    #     doc_semantic_score / doc_semantic_score.max(),
-    #     doc_encoding,
-    #     score_threshold=0.5,
-    # )
+    # Instructions
+    - Answer the query using your internal knowledge
+    - Be clear about the limits of your knowledge — if something may have changed recently, say so
+    - Do not fabricate specific facts like prices, dates, or statistics you are uncertain about
+    - Keep the answer concise and direct
 
-    # final_docs_index = rrf([mmr_dense, mmr_sparse])
-    return
+    # Output Format
+    Answer in clear prose. Lead with the answer, then add supporting detail.
+    """
+
+        # Response from user
+        result = chat(
+            model=gemma_lite,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            format=None,
+            think=True,
+        )
+
+        # Message
+        return {
+            "messages": [Message(role="assistant", content=result.message.content)]
+        }
+
+    return (answering_node,)
 
 
 @app.cell
@@ -663,6 +729,7 @@ def _(
     END,
     START,
     StateGraph,
+    answering_node,
     smart_query_node,
     summarizer_node,
     web_search_node,
@@ -680,6 +747,8 @@ def _(
     )
     builder01.add_node("Web Search?", web_use_node)
     builder01.add_node("Google it!!", web_search_node)
+    builder01.add_node("Answering Node", answering_node)
+
 
     # Add Edges to the Graph
     builder01.add_conditional_edges(
@@ -695,9 +764,11 @@ def _(
     builder01.add_conditional_edges(
         "Web Search?",
         lambda state: state["use_web"],
-        {True: "Google it!!", False: END},
+        {True: "Google it!!", False: "Answering Node"},
     )
-    builder01.add_edge("Google it!!", END)
+    builder01.add_edge("Google it!!", "Answering Node")
+    builder01.add_edge("Answering Node", END)
+
 
     # build the app
     app01 = builder01.compile()
@@ -729,7 +800,14 @@ def _(Message, app01):
 
 
 @app.cell
-def _():
+def _(mo):
+    mo.md("""
+    [assistant]: The provided search results offer several figures related to Nvidia's stock price:
+
+    *   The current price of Nvidia Corporation stock is listed as **$878.08**.
+    *   One section of the context states that the Nvidia stock price today is **$208.19**.
+    *   Trading activity data shows an approximate price for the NVDA ticker was **Around $182–$185**.
+    """)
     return
 
 
