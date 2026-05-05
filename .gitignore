@@ -13,3 +13,7 @@ wheels/
 .venv/
 model/
 models/
+.cache/
+logs/
+__marimo__/
+.ruff_cache/

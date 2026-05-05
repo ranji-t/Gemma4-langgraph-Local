@@ -17,12 +17,11 @@ def _():
     # Standard Imports
     import pytz
     from datetime import datetime
-    from typing import TypedDict, Any, Callable
+    from typing import Callable
 
     # Third party Imports
     import marimo as mo
     from ddgs import DDGS
-    from langgraph.graph import StateGraph, START, END
     from ollama import chat, generate, ChatResponse, GenerateResponse, Message
 
     return (
@@ -176,11 +175,9 @@ def _(Callable, Message, datetime, pytz):
         """Sums two numbers a & b"""
         return int(a) + int(b)
 
-
     def multiply_two_numbers(a: str, b: str) -> int | float:
         """Multiply two numbers a & b"""
         return int(a) * int(b)
-
 
     def call_tools(
         tool_call: Message.ToolCall, tool_dict: dict[str, Callable]
@@ -205,7 +202,6 @@ def _(Callable, Message, datetime, pytz):
             "content": str(result),
         }
 
-
     def date_time_rightnow() -> str:
         """Get The date time now in IST as String. No arguments required."""
         # get the datetime of the present
@@ -219,7 +215,6 @@ def _(Callable, Message, datetime, pytz):
 
         # The date as str
         return mydt.strftime("%Y-%m-%d %H:%M:%S %Z")
-
 
     # The Tool dict is genrated
     tools_dict = {
@@ -302,9 +297,7 @@ def _(
 ):
     if tools_list := chat_res4["message"].get("tool_calls"):
         # get Results:
-        tool_resluts = [
-            call_tools(res, tool_dict=tools_dict) for res in tools_list
-        ]
+        tool_resluts = [call_tools(res, tool_dict=tools_dict) for res in tools_list]
 
         # Extended messages
         extened_messages = [*messages, chat_res4["message"], *tool_resluts]
@@ -370,12 +363,9 @@ def _(ChatResponse, call_tools, chat, gemma_light, sys_prompt2, tools_dict):
         tools=list(tools_dict.values()),
     )
 
-
     if tools_list2 := chat_res5["message"].get("tool_calls"):
         # get Results:
-        tool_resluts2 = [
-            call_tools(res, tool_dict=tools_dict) for res in tools_list2
-        ]
+        tool_resluts2 = [call_tools(res, tool_dict=tools_dict) for res in tools_list2]
 
         # Extended messages
         extened_messages2 = [*messages2, chat_res5["message"], *tool_resluts2]
@@ -442,7 +432,6 @@ def _(mo):
 @app.cell
 def _():
     # Standrd Imports
-    import os
 
     # Third Party Imports
     from dotenv import load_dotenv
@@ -648,7 +637,6 @@ def _(OpenAI, wrap_openai):
     # System prompt
     eval_instructions = "You are an expert professor specialized in grading student's answer to questions."
 
-
     # The Evauation metic Correctness
     def correctness(inputs: dict, outputs: dict, reference_outputs: dict) -> bool:
         # The Prompt
@@ -681,8 +669,9 @@ def _(OpenAI, wrap_openai):
 
 @app.cell
 def _(openai_client):
-    default_instructions = "Respond to the users question in a short, concise manner (one short sentence)."
-
+    default_instructions = (
+        "Respond to the users question in a short, concise manner (one short sentence)."
+    )
 
     def my_app(
         inputs: dict,

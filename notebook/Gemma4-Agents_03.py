@@ -1,62 +1,318 @@
 import marimo
 
 __generated_with = "0.23.4"
-app = marimo.App(width="full", app_title="Gemma-LangGraph-SentenceTr")
+app = marimo.App(width="full")
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **01. Gemma4 Test Note 03**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    This note books uses.
+    #### *Tools*
+    - Gemma4
+    - Fast Embedder
+    - LangGraph
+    - DuckDuckGo
+
+    ### *Techniques*
+    - Dense Similarity
+    - BM25
+    - MMR on Sense and Sparce
+    - RRF k=60
+    - Logging Decorator
+    """)
+    return
 
 
 @app.cell
 def _():
     # Standard Imports
-    import json
+    import re
+    import logging
     import operator
     from itertools import chain
+    from functools import wraps
+    from time import perf_counter, sleep
     from dataclasses import dataclass, field
-    from typing import TypedDict, Literal, Self, Sequence, Annotated
+    from typing import TypedDict, Sequence, Annotated, Callable, Any, Literal
 
     # Third party Imports
     import marimo as mo
     import numpy as np
-    from rank_bm25 import BM25Okapi
     from ollama import chat
+    from pydantic import BaseModel
     from ddgs.ddgs import DDGS, DDGSException
     from langgraph.graph import START, END
     from langgraph.graph.state import StateGraph
+    from rank_bm25 import BM25Okapi
+    from fastembed import TextEmbedding
     from sentence_transformers import SentenceTransformer
-    from langchain_text_splitters import (
-        RecursiveCharacterTextSplitter,
-        TokenTextSplitter,
-    )
+    from langchain_text_splitters import TokenTextSplitter
 
     return (
         Annotated,
+        Any,
         BM25Okapi,
+        BaseModel,
+        Callable,
         DDGS,
         DDGSException,
         END,
         Literal,
-        RecursiveCharacterTextSplitter,
         START,
-        Self,
         SentenceTransformer,
         Sequence,
         StateGraph,
+        TextEmbedding,
         TokenTextSplitter,
         TypedDict,
         chain,
         chat,
         dataclass,
         field,
-        json,
+        logging,
         mo,
         np,
         operator,
+        perf_counter,
+        re,
+        sleep,
+        wraps,
     )
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **LLM Functions**
+    # **02. Start Up processes**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Logging*
+    """)
+    return
+
+
+@app.cell
+def _(logging):
+    # Logging Set Up
+    logging.basicConfig(
+        level=logging.INFO, filename=r"D:\Codebase\Gemma4-Test\logs\logs04.log"
+    )
+    # Get Loggers
+    logger = logging.getLogger(name="notebook04")
+    return (logger,)
+
+
+@app.cell
+def _(Any, Callable, logger, perf_counter, wraps):
+    # the logging decorator
+    def logging_decorator(func: Callable[Any, Any]):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                # Counter start
+                start_time = perf_counter()
+                # Call the func
+                result = func(*args, **kwargs)
+                # Run Time log
+                logger.info(
+                    f"func: {func.__name__} ran for {perf_counter() - start_time:.3f} seconds."
+                )
+            except Exception as e:
+                # log the error
+                logger.error(f"func: {func.__name__} ran exception: {e}")
+                # Reraise
+                raise e
+            # Return Resutlts
+            return result
+
+        # Return wrapper
+        return wrapper
+
+    return (logging_decorator,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Retry Logic**
+    """)
+    return
+
+
+@app.cell
+def _(logger, sleep, wraps):
+    def sync_retry(
+        max_retries: int = 3,
+        delay: float = 1.0,
+        backoff=2.0,
+        exceptions=(Exception,),
+    ):
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                # The current dealy time
+                current_delay = delay
+                # interate through the tries
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        # Call the function
+                        result = func(*args, **kwargs)
+                        # Return the data
+                        return result
+
+                    except exceptions as e:
+                        # If the attempt failed
+                        if attempt == max_retries:
+                            logger.error(
+                                f"Function '{func.__name__}' failed after {max_retries} attempts."
+                            )
+                            raise e
+                        # Log the retry
+                        logger.warning(
+                            f"Attempt {attempt}/{max_retries} for '{func.__name__}' failed: {e}. "
+                            f"Retrying in {current_delay} seconds..."
+                        )
+                        # Sleep then Update the time
+                        sleep(current_delay)
+                        current_delay *= backoff
+
+            # The Return of wrapper
+            return wrapper
+
+        # Return the decorator
+        return decorator
+
+    return (sync_retry,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Embedder*
+    """)
+    return
+
+
+@app.cell
+def _(SentenceTransformer, TextEmbedding):
+    # Create Encoder
+    encoder_model = SentenceTransformer(
+        # model_name_or_path="all-mpnet-base-v2",
+        model_name_or_path="nomic-ai/nomic-embed-text-v1.5",
+        # model_name_or_path="nomic-ai/nomic-embed-text-v1.5-Q",
+        cache_folder=r"D:\Codebase\Gemma4-Test\model",
+        local_files_only=True,
+    )
+
+    # Create Encoder
+    fe_encoder_model = TextEmbedding(
+        model_name="nomic-ai/nomic-embed-text-v1.5-Q",
+        cache_dir=r"D:\Codebase\Gemma4-Test\.cache",
+    )
+    return encoder_model, fe_encoder_model
+
+
+@app.cell
+def _(Literal, Sequence, fe_encoder_model, np):
+    def embed_with_fs(
+        *,
+        texts: Sequence[str],
+        prompt: Literal["search_document", "search_query"],
+        batch_size: int = 32,
+    ) -> np.ndarray:
+        # Check the prompt
+        if prompt not in {"search_document", "search_query"}:
+            raise ValueError(
+                f"prompt can only be 'search_document' or 'search_query' "
+                f"but instead got '{prompt}'"
+            )
+        # Check if the
+        if not (
+            isinstance(texts, list)
+            or isinstance(texts, tuple)
+            or isinstance(texts, set)
+        ):
+            raise TypeError(f"texts is to be an iterable. But {type(texts)}")
+
+        # Norm of the data
+        test_embed_not_norm = np.array(
+            list(
+                fe_encoder_model.embed(
+                    [f"{prompt}: {_}" for _ in texts], batch_size=batch_size
+                )
+            )
+        )
+
+        # Inverse of L2 Norm
+        l2_norm_inv = 1 / np.linalg.norm(test_embed_not_norm, axis=1).clip(min=1e-9)
+
+        # Shpaes of the data
+        return np.einsum("nf, n ->nf", test_embed_not_norm, l2_norm_inv)
+
+    return (embed_with_fs,)
+
+
+@app.cell
+def _(embed_with_fs):
+    embed_docs = embed_with_fs(
+        texts=["Where is Gamora?", "Who is Quinn?", "Why is Drax?"],
+        prompt="search_document",
+    )
+
+    embed_docs.shape
+    return (embed_docs,)
+
+
+@app.cell
+def _(embed_with_fs):
+    embed_query = embed_with_fs(
+        texts=["what is Gamora?"],
+        prompt="search_query",
+    )[0]
+
+    embed_query.shape
+    return (embed_query,)
+
+
+@app.cell
+def _(embed_docs, embed_query, np):
+    np.einsum("ne, e -> n", embed_docs, embed_query)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Regex Pattern Compile*
+    """)
+    return
+
+
+@app.cell
+def _(re):
+    # Compile the pattern
+    BM25_TOKENIZER = re.compile(r"\b\w+\b")
+    return (BM25_TOKENIZER,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **03. LLM Functions**
     """)
     return
 
@@ -95,6 +351,14 @@ def _():
     gemma_lite = "gemma4:e2b"
     gemma_mid = "gemma4:e4b"
     return (gemma_lite,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Use Web Decion Function*
+    """)
+    return
 
 
 @app.cell
@@ -147,25 +411,33 @@ def _(chat, gemma_lite):
 
 
 @app.cell
-def _(use_web):
-    # result = use_web("What is the Nvidia Stock prices today?")
-    result = use_web(
-        "What are the questions asked in coupa interviews for data scientist?"
-    )
-    return (result,)
-
-
-@app.cell
-def _(json, result):
-    # Convert the string to JSON
-    json.loads(result.message.content)
+def _():
+    # # result = use_web("What is the Nvidia Stock prices today?")
+    # result = use_web(
+    #     "What are the questions asked in coupa interviews for data scientist?"
+    # )
     return
 
 
 @app.cell
-def _(mo, result):
-    # The Thinking Source
-    mo.md(result.message.thinking)
+def _():
+    # # Convert the string to JSON
+    # json.loads(result.message.content)
+    return
+
+
+@app.cell
+def _():
+    # # The Thinking Source
+    # mo.md(result.message.thinking)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Summarize Function*
+    """)
     return
 
 
@@ -202,58 +474,66 @@ def _(Message, chat, gemma_lite):
 
 
 @app.cell
-def _(Message, summarizer):
-    # This the test message
-    test_messages_01 = [
-        Message("user", "Who are you?"),
-        Message("assistant", "Hi I am Gemini?"),
-        Message("user", "I have an interview lined up with Coupa."),
-        Message("assistant", "Congratulation!!!! How can I help you?"),
-        Message(
-            "user",
-            "I want to know what kind of questions will be asked in the first round of Data Scientist interview",
-        ),
-        Message(
-            "assistant",
-            """
-    After that recruiter screen, there may be an online technical assessment covering coding problems and data structures, typically 3 questions within 45–60 minutes. GeeksforGeeks
+def _():
+    # # This the test message
+    # test_messages_01 = [
+    #     Message("user", "Who are you?"),
+    #     Message("assistant", "Hi I am Gemini?"),
+    #     Message("user", "I have an interview lined up with Coupa."),
+    #     Message("assistant", "Congratulation!!!! How can I help you?"),
+    #     Message(
+    #         "user",
+    #         "I want to know what kind of questions will be asked in the first round of Data Scientist interview",
+    #     ),
+    #     Message(
+    #         "assistant",
+    #         """
+    # After that recruiter screen, there may be an online technical assessment covering coding problems and data structures, typically 3 questions within 45–60 minutes. GeeksforGeeks
 
-    Round 1 — Technical Questions Actually Asked
-    ML Concepts
+    # Round 1 — Technical Questions Actually Asked
+    # ML Concepts
 
-    You are tasked with building a decision tree to predict if a borrower will repay a loan — how would you evaluate if it's the right choice, and how would you assess performance before and after deployment? PR Newswire
-    Explain how a random forest generates its ensemble of trees, and why you might choose it over logistic regression. PR Newswire
-    Compare bagging vs boosting — describe scenarios where you'd prefer one over the other and discuss the tradeoffs. PR Newswire
-    Your manager asks you to build a neural network model — how would you justify its complexity and explain its predictions to non-technical stakeholders? PR Newswire
-    Calculating the number of trainable parameters for a CNN. ArcWeb
+    # You are tasked with building a decision tree to predict if a borrower will repay a loan — how would you evaluate if it's the right choice, and how would you assess performance before and after deployment? PR Newswire
+    # Explain how a random forest generates its ensemble of trees, and why you might choose it over logistic regression. PR Newswire
+    # Compare bagging vs boosting — describe scenarios where you'd prefer one over the other and discuss the tradeoffs. PR Newswire
+    # Your manager asks you to build a neural network model — how would you justify its complexity and explain its predictions to non-technical stakeholders? PR Newswire
+    # Calculating the number of trainable parameters for a CNN. ArcWeb
 
-    Data Engineering / SQL
+    # Data Engineering / SQL
 
-    ETL pipeline design questions, Snowflake data warehouse tools, PySpark coding, and data transformation. iMocha
+    # ETL pipeline design questions, Snowflake data warehouse tools, PySpark coding, and data transformation. iMocha
 
-    Coding / DSA
+    # Coding / DSA
 
-    DSA questions at easy to medium LeetCode level — basic LeetCode 75 is sufficient. Live coding or pseudo code expected. iMocha
-    """,
-        ),
-        Message("user", "I am nervous!"),
-    ]
+    # DSA questions at easy to medium LeetCode level — basic LeetCode 75 is sufficient. Live coding or pseudo code expected. iMocha
+    # """,
+    #     ),
+    #     Message("user", "I am nervous!"),
+    # ]
 
-    result2 = summarizer(messages=test_messages_01)
-    return (result2,)
-
-
-@app.cell
-def _(mo, result2):
-    # Result
-    mo.md(result2.message.content)
+    # result2 = summarizer(messages=test_messages_01)
     return
 
 
 @app.cell
-def _(mo, result2):
-    # The Thinking Source
-    mo.md(result2.message.thinking)
+def _():
+    # # Result
+    # mo.md(result2.message.content)
+    return
+
+
+@app.cell
+def _():
+    # # The Thinking Source
+    # mo.md(result2.message.thinking)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Update Query Node*
+    """)
     return
 
 
@@ -302,52 +582,40 @@ def _(chat, gemma_lite):
 
 
 @app.cell
-def _(result2, update_query):
-    result3 = update_query(
-        result2.message.content,
-        "Where this companies office situated?",
-    )
-    return (result3,)
-
-
-@app.cell
-def _(mo, result3):
-    #  Show the updated query
-    mo.md(result3.message.content)
+def _():
+    # result3 = update_query(
+    #     result2.message.content,
+    #     "Where this companies office situated?",
+    # )
     return
 
 
 @app.cell
-def _(mo, result3):
-    # Show the Thinking
-    mo.md(result3.message.thinking)
+def _():
+    # #  Show the updated query
+    # mo.md(result3.message.content)
+    return
+
+
+@app.cell
+def _():
+    # # Show the Thinking
+    # mo.md(result3.message.thinking)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **SetUp Actions On App Start up**
+    # **04. Web Search, Embedding, BM25, MMR & RRF**
     """)
     return
 
 
-@app.cell
-def _(SentenceTransformer):
-    # Create Encoder
-    encoder_model = SentenceTransformer(
-        # model_name_or_path="all-mpnet-base-v2",
-        model_name_or_path="nomic-ai/nomic-embed-text-v1.5",
-        cache_folder=r"D:\Codebase\Gemma4-Test\model",
-        local_files_only=True,
-    )
-    return (encoder_model,)
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **Web Search**
+    ## *Web Search With DDG*
     """)
     return
 
@@ -356,11 +624,12 @@ def _(mo):
 def _(
     DDGS,
     DDGSException,
-    RecursiveCharacterTextSplitter,
     Sequence,
     TokenTextSplitter,
     chain,
+    logging_decorator,
 ):
+    @logging_decorator
     def perform_web_search(query: str, max_results: int = 5) -> Sequence[str]:
         # Show web results
         web_results = []
@@ -380,12 +649,9 @@ def _(
                 except DDGSException as e:
                     print(f"DDGSException: {e}")
 
-        # The Recursice Character text split
-        rcts = RecursiveCharacterTextSplitter(
-            chunk_size=4000,
-            chunk_overlap=200,
-        )
+        # The Token based filter
         tts = TokenTextSplitter(chunk_size=300, chunk_overlap=50)
+
         # The Splitter splits web results
         split_text = chain.from_iterable(tts.split_text(txt) for txt in web_results)
 
@@ -395,8 +661,25 @@ def _(
     return (perform_web_search,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Score for Embedder & BM25 full text search*
+    """)
+    return
+
+
 @app.cell
-def _(BM25Okapi, Sequence, encoder_model, np):
+def _(
+    BM25Okapi,
+    BM25_TOKENIZER,
+    Sequence,
+    embed_with_fs,
+    encoder_model,
+    logging_decorator,
+    np,
+):
+    @logging_decorator
     def context_scorer(query: str, docs: Sequence[str]):
         # Create Document Encoding
         doc_encoding = encoder_model.encode(
@@ -419,10 +702,30 @@ def _(BM25Okapi, Sequence, encoder_model, np):
         # return
         return (sim_score, doc_encoding, query_encoding)
 
+    @logging_decorator
+    def context_scorer_fe(query: str, docs: Sequence[str], batch_size: int = 32):
+        # Create Document Encoding
+        doc_encoding = embed_with_fs(
+            texts=docs, prompt="search_document", batch_size=batch_size
+        )
+
+        # Create query Embedding
+        query_encoding = embed_with_fs(
+            texts=[query],
+            prompt="search_query",
+        )[0]
+
+        # Similarity
+        sim_score = np.einsum("de, e -> d", doc_encoding, query_encoding)
+
+        # return
+        return (sim_score, doc_encoding, query_encoding)
+
+    @logging_decorator
     def semantic_scorer(query: str, docs: Sequence[str]):
         # Tokenize the query
-        tokenized_docs = [doc.lower().strip().split() for doc in docs]
-        tokenized_query = query.lower().strip().split()
+        tokenized_docs = [BM25_TOKENIZER.findall(doc.lower().strip()) for doc in docs]
+        tokenized_query = BM25_TOKENIZER.findall(query.lower().strip())
 
         # Build BM25 index
         bm25 = BM25Okapi(corpus=tokenized_docs)
@@ -433,14 +736,47 @@ def _(BM25Okapi, Sequence, encoder_model, np):
         # return
         return scores
 
-    return context_scorer, semantic_scorer
+    return context_scorer_fe, semantic_scorer
 
 
 @app.cell
-def _(nd, np):
+def _():
+    # # Web search time
+    # test_web_search_results = perform_web_search("Apple Stock prices?")
+
+    # # Number of chunts
+    # print(len(test_web_search_results))
+    return
+
+
+@app.cell
+def _():
+    # # The Context Scorer Sentence Trasnfomerms
+    # _ = context_scorer("Apple Stock prices?", test_web_search_results)
+    return
+
+
+@app.cell
+def _():
+    # # The context scoret Fast Embedding
+    # _ = context_scorer_fe("Apple Stock prices?", test_web_search_results)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Perform MMR*
+    """)
+    return
+
+
+@app.cell
+def _(logging_decorator, nd, np):
+    @logging_decorator
     def mmr(
-        scores: nd.arrays,
-        doc_encoding: nd.arrays,
+        scores: nd.ndarray,
+        doc_encoding: nd.ndarray,
         top_k: int = 10,
         lambda_param: float = 0.5,
         score_threshold: float = -np.inf,
@@ -495,24 +831,44 @@ def _(nd, np):
     return (mmr,)
 
 
-@app.function
-def rrf(ranked_lists: list[list[int]], k: int = 60, top_n: int = 10):
-    # The sore tracker for each index
-    scores = dict()
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *RRF (Recursive Rank Regression)*
+    """)
+    return
 
-    # Iterate through lists
-    for ranked_list in ranked_lists:
-        for i, idx in enumerate(ranked_list, start=1):
-            if idx in scores:
-                scores[idx] += 1 / (k + i)
-            else:
-                scores[idx] = 1 / (k + i)
 
-    # Sort the values based on the value
-    rrf_ranks = sorted(scores.keys(), key=lambda k: scores.get(k), reverse=True)
+@app.cell
+def _(logging_decorator):
+    @logging_decorator
+    def rrf(ranked_lists: list[list[int]], k: int = 60, top_n: int = 10):
+        # The sore tracker for each index
+        scores = dict()
 
-    # Return sorted inidices
-    return list(rrf_ranks)[:top_n], sorted(scores.values())
+        # Iterate through lists
+        for ranked_list in ranked_lists:
+            for i, idx in enumerate(ranked_list, start=1):
+                if idx in scores:
+                    scores[idx] += 1 / (k + i)
+                else:
+                    scores[idx] = 1 / (k + i)
+
+        # Sort the values based on the value
+        rrf_ranks = sorted(scores.keys(), key=lambda k: scores.get(k), reverse=True)
+
+        # Return sorted inidices
+        return list(rrf_ranks)[:top_n], sorted(scores.values())
+
+    return (rrf,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Test Functions*
+    """)
+    return
 
 
 @app.cell
@@ -546,7 +902,15 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **The Agent Graph**
+    # **05. The Agent Graph**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Graph State*
     """)
     return
 
@@ -564,16 +928,38 @@ def _(Annotated, Message, Sequence, TypedDict, operator):
     return (AgentState01,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *The Node Functions*
+    """)
+    return
+
+
+@app.cell
+def _(BaseModel):
+    class UseWebTemplate(BaseModel):
+        use_web: bool
+
+    # Test the model output vlaidation with json
+    UseWebTemplate.model_validate_json('{"use_web": true}').model_dump()
+    return (UseWebTemplate,)
+
+
 @app.cell
 def _(
     AgentState01,
     Message,
     Sequence,
-    json,
+    UseWebTemplate,
+    logging_decorator,
     summarizer,
+    sync_retry,
     update_query,
     use_web,
 ):
+    @sync_retry()
+    @logging_decorator
     def summarizer_node(state: AgentState01) -> AgentState01:
         # Extrac messages
         messsages = state["messages"]
@@ -582,6 +968,8 @@ def _(
         # Content summarized
         return {"summary": result.message.content}
 
+    @sync_retry()
+    @logging_decorator
     def smart_query_node(state: AgentState01) -> AgentState01:
         # Extract the query
         query = state["messages"][-1].content
@@ -592,6 +980,8 @@ def _(
         # Update the query
         return {"prime_query": result.message.content}
 
+    @sync_retry()
+    @logging_decorator
     def web_use_node(state: AgentState01) -> AgentState01:
         # Message extraction
         messages: Sequence[Message] = state["messages"]
@@ -599,18 +989,34 @@ def _(
         # Extract the last query from the node
         query: str = messages[-1].content
 
-        # Does the node need
+        # Does the node need web
         resonse = use_web(user_query=query)
-        json_return = json.loads(resonse.message.content)
 
-        # message
-        return {"use_web": json_return["use_web"]}
+        # Gather the JSON String result and parse it into dict
+        json_response = UseWebTemplate.model_validate_json(
+            resonse.message.content
+        ).model_dump()
+
+        # Structured Response
+        return json_response
 
     return smart_query_node, summarizer_node, web_use_node
 
 
 @app.cell
-def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
+def _(
+    AgentState01,
+    context_scorer_fe,
+    logging_decorator,
+    mmr,
+    np,
+    perform_web_search,
+    rrf,
+    semantic_scorer,
+    sync_retry,
+):
+    @sync_retry()
+    @logging_decorator
     def web_search_node(state: AgentState01) -> AgentState01:
         # Extract Query from sate
         query = state["prime_query"]
@@ -619,7 +1025,10 @@ def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
         search_results = perform_web_search(query)
 
         # Rank the documents Context Wise
-        doc_context_score, doc_encoding, query_encoding = context_scorer(
+        # doc_context_score, doc_encoding, query_encoding = context_scorer(
+        #     query, search_results
+        # )
+        doc_context_score, doc_encoding, query_encoding = context_scorer_fe(
             query, search_results
         )
 
@@ -630,13 +1039,13 @@ def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
         mmr_dense = mmr(doc_context_score, doc_encoding, score_threshold=0.5)
         # Get MMR IDs based on Sparsity
         mmr_sparse = mmr(
-            doc_semantic_score / doc_semantic_score.max(),
+            doc_semantic_score / np.maximum(doc_semantic_score.max(), 1e-9),
             doc_encoding,
             score_threshold=0.5,
         )
 
         # Get the Final results
-        final_docs_index, _ = rrf([mmr_dense, mmr_sparse], top_n=5)
+        final_docs_index, _ = rrf([mmr_dense, mmr_sparse], top_n=3)
         # Final Docs
         final_docs = [search_results[i] for i in final_docs_index]
 
@@ -647,7 +1056,9 @@ def _(AgentState01, context_scorer, mmr, perform_web_search, semantic_scorer):
 
 
 @app.cell
-def _(AgentState01, Message, chat, gemma_lite):
+def _(AgentState01, Message, chat, gemma_lite, logging_decorator, sync_retry):
+    @sync_retry()
+    @logging_decorator
     def answering_node(state: AgentState01) -> AgentState01:
         # Get enghances query
         user_prompt = state["prime_query"]
@@ -710,6 +1121,14 @@ def _(AgentState01, Message, chat, gemma_lite):
     return (answering_node,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Graph Structure*
+    """)
+    return
+
+
 @app.cell
 def _(
     AgentState01,
@@ -760,6 +1179,14 @@ def _(
     return (app01,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## *Test the App*
+    """)
+    return
+
+
 @app.cell
 def _(app01):
     # Show Graph
@@ -770,7 +1197,7 @@ def _(app01):
 @app.cell
 def _(Message, app01):
     # app01.invoke({"messages": [Message(role="user", content="Who are You?")]})
-    app01.invoke(
+    result4 = app01.invoke(
         {
             "messages": [
                 Message(role="user", content="Who are You?"),
@@ -779,24 +1206,16 @@ def _(Message, app01):
             ]
         }
     )
-    return
+
+    # Show reslults
+    result4
+    return (result4,)
 
 
 @app.cell
-def _(result3):
-    result3["messages"]
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    [assistant]: The provided search results offer several figures related to Nvidia's stock price:
-
-    *   The current price of Nvidia Corporation stock is listed as **$878.08**.
-    *   One section of the context states that the Nvidia stock price today is **$208.19**.
-    *   Trading activity data shows an approximate price for the NVDA ticker was **Around $182–$185**.
-    """)
+def _(mo, result4):
+    # Show Final Answer
+    mo.md(result4["messages"][-1].content)
     return
 
 
