@@ -59,6 +59,7 @@ def _():
     from ollama import chat
     from pydantic import BaseModel
     from ddgs.ddgs import DDGS, DDGSException
+    from tavily import TavilyClient
     from langgraph.graph import START, END
     from langgraph.graph.state import StateGraph
     from rank_bm25 import BM25Okapi
@@ -74,6 +75,7 @@ def _():
         DDGS,
         DDGSException,
         END,
+        TavilyClient,
         Literal,
         NamedTuple,
         START,
@@ -706,6 +708,71 @@ def _(
 
 
 @app.cell
+def _(
+    Sequence,
+    TavilyClient,
+    TokenTextSplitter,
+    WebSearchResults,
+    logging_decorator,
+):
+    import os as _os
+
+    @logging_decorator
+    def perform_web_search_tavily(
+        *, query: str, max_results: int = 5
+    ) -> Sequence[WebSearchResults]:
+        # Initialize Tavily client (uses TAVILY_API_KEY env var)
+        tavily_client = TavilyClient()
+
+        # Search with Tavily
+        response = tavily_client.search(
+            query=query,
+            max_results=max_results,
+            search_depth="advanced",
+        )
+
+        # Map Tavily results to WebSearchResults
+        web_results: list[WebSearchResults] = []
+        for idx, result in enumerate(response["results"], start=1):
+            web_results.append(
+                WebSearchResults(
+                    search_id=idx,
+                    chunk_id=None,
+                    url=result.get("url", ""),
+                    title=result.get("title", ""),
+                    snippet=result.get("content", ""),
+                    content=result.get("content", ""),
+                )
+            )
+
+        # The Token based filter
+        tts = TokenTextSplitter(chunk_size=300, chunk_overlap=50)
+
+        # Chunk the objects
+        chunked_web_results: list[WebSearchResults] = []
+        for res in web_results:
+            split_content = tts.split_text(res.content)
+            for chunk_id, chunk in enumerate(split_content, start=1):
+                chunked_web_results.append(
+                    WebSearchResults(
+                        res.search_id,
+                        chunk_id,
+                        res.url,
+                        res.title,
+                        res.snippet,
+                        chunk,
+                    )
+                )
+
+        return chunked_web_results
+
+    # Check USE_TAVILY_SEARCH env var to select default search provider
+    USE_TAVILY_SEARCH = _os.environ.get("USE_TAVILY_SEARCH", "false").lower() == "true"
+
+    return USE_TAVILY_SEARCH, perform_web_search_tavily
+
+
+@app.cell
 def _():
     # # Web Seerch Test with DDG
     # web_search_results = perform_web_search(
@@ -1191,12 +1258,16 @@ def _(
 @app.cell
 def _(
     AgentState01,
+    DDGSException,
     RetrivedDocs,
+    USE_TAVILY_SEARCH,
     context_scorer_fe,
+    logger,
     logging_decorator,
     mmr,
     np,
     perform_web_search,
+    perform_web_search_tavily,
     rrf,
     semantic_scorer,
     sync_retry,
@@ -1207,8 +1278,15 @@ def _(
         # Extract Query from sate
         query = state["prime_query"]
 
-        # Search The web
-        search_results = perform_web_search(query=query, max_results=5)
+        # Select search provider based on env flag, with DDGS->Tavily fallback
+        if USE_TAVILY_SEARCH:
+            search_results = perform_web_search_tavily(query=query, max_results=5)
+        else:
+            try:
+                search_results = perform_web_search(query=query, max_results=5)
+            except DDGSException as e:
+                logger.warning(f"DDGS search failed, falling back to Tavily: {e}")
+                search_results = perform_web_search_tavily(query=query, max_results=5)
 
         # Extract contents form websearch reesults
         content = [_.content for _ in search_results]
