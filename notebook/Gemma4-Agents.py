@@ -22,6 +22,7 @@ def _():
     # Third party Imports
     import marimo as mo
     from ddgs import DDGS
+    from tavily import TavilyClient
     from ollama import chat, generate, ChatResponse, GenerateResponse, Message
 
     return (
@@ -29,6 +30,7 @@ def _():
         ChatResponse,
         DDGS,
         GenerateResponse,
+        TavilyClient,
         Message,
         chat,
         datetime,
@@ -405,6 +407,26 @@ def _(DDGS):
     results = DDGS().text(query="Python classes?", max_results=5)
     results
     return (results,)
+
+
+@app.cell
+def _(TavilyClient):
+    import os as _os
+
+    # Tavily search as an alternative to DDGS
+    # Set USE_TAVILY_SEARCH=true and TAVILY_API_KEY env vars to use
+    USE_TAVILY_SEARCH = _os.environ.get("USE_TAVILY_SEARCH", "false").lower() == "true"
+
+    if USE_TAVILY_SEARCH:
+        _tavily_client = TavilyClient()
+        tavily_results = _tavily_client.search(
+            query="Python classes?", max_results=5
+        )["results"]
+    else:
+        tavily_results = None
+
+    tavily_results
+    return (tavily_results,)
 
 
 @app.cell
