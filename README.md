@@ -242,7 +242,10 @@ Gemma4-Test/
 export OLLAMA_MODELS=/d/.files/.ollama/models
 
 # Start the Ollama server
-clear && export OLLAMA_MODELS=/d/.files/.ollama/models && ollama serve
+export OLLAMA_MODELS="D:\.files\.ollama\models" && export OLLAMA_CONTEXT_LENGTH=16384 && ollama serve
+
+# With logging
+export OLLAMA_MODELS="D:\.files\.ollama\models" && export OLLAMA_CONTEXT_LENGTH=16384 && ollama serve 2>&1 | tee ./logs/ollama_inference.log
 
 # In a separate terminal — pull the model
 ollama pull gemma4:e2b
