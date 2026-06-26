@@ -1645,7 +1645,10 @@ def _(
         base_url="http://localhost:11434/v1",
     )
     local_llm_judge = llm_factory(
-        "gemma4:e4b", provider="openai", client=client
+        "gemma4:e4b",
+        provider="openai",
+        client=client,
+        model_kwargs={"response_format": {"type": "json_object"}},
     )
 
     # Create Datset for Ragas
