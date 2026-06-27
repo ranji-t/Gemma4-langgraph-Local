@@ -55,6 +55,7 @@ def _():
     )
 
     # Third party Imports
+    import instructor
     import marimo as mo
     import numpy as np
     from ollama import chat
@@ -66,6 +67,7 @@ def _():
     from fastembed import TextEmbedding
     from langchain_text_splitters import TokenTextSplitter
     from datasets import Dataset
+    from openai import OpenAI
     from ragas import evaluate
     from ragas.metrics import (
         faithfulness,
@@ -73,6 +75,7 @@ def _():
         context_precision,
         answer_relevancy,
     )
+    from ragas.llms import llm_factory
     from ragas.llms import LangchainLLMWrapper
     from ragas.embeddings import LangchainEmbeddingsWrapper
 
@@ -84,10 +87,10 @@ def _():
         Callable,
         DDGS,
         DDGSException,
-        Dataset,
         END,
         Literal,
         NamedTuple,
+        OpenAI,
         START,
         Self,
         Sequence,
@@ -97,12 +100,10 @@ def _():
         TypeVar,
         TypedDict,
         chat,
-        context_precision,
-        context_recall,
-        evaluate,
-        faithfulness,
         field,
         filterwarnings,
+        instructor,
+        llm_factory,
         logging,
         mo,
         np,
@@ -1624,22 +1625,19 @@ def _():
             ),
         ],
     }
-    return (data,)
+    return
 
 
 @app.cell
-def _(
-    Dataset,
-    context_precision,
-    context_recall,
-    data,
-    evaluate,
-    faithfulness,
-):
-    from ragas.llms import llm_factory
-    from openai import OpenAI
+def _():
+    # from ragas.llms import llm_factory
 
-    # Create an OpenAI-compatible client for Ollama
+    # llm_factory
+    return
+
+
+@app.cell
+def _(OpenAI, instructor, llm_factory):
     client = OpenAI(
         api_key="ollama",  # Ollama doesn't require a real key
         base_url="http://localhost:11434/v1",
@@ -1648,25 +1646,9 @@ def _(
         "gemma4:e4b",
         provider="openai",
         client=client,
-        model_kwargs={"response_format": {"type": "json_object"}},
+        mode=instructor.Mode.JSON,
     )
-
-    # Create Datset for Ragas
-    dataset = Dataset.from_dict(data)
-
-    # Evaluate the results
-    results = evaluate(
-        dataset=dataset,
-        metrics=[
-            faithfulness,
-            # answer_relevancy,
-            context_precision,
-            context_recall,
-        ],
-        llm=local_llm_judge,
-        # embeddings=FastEmbeddingRagas(),
-    )
-    return (results,)
+    return
 
 
 @app.cell
